@@ -95,7 +95,7 @@ chmod 600 ~/.config/babeldoc/babeldoc.toml
 openai = true
 openai-model = "模型名称"                    # 需要自己填写
 openai-base-url = "https://你的接口地址/v1"    # 需要自己填写
-openai-api-key = "你的 API 密钥"                
+openai-api-key = "你的 API 密钥"                # 需要自己填写                    
 
 lang-in = "en-US"
 lang-out = "zh-CN"
@@ -152,10 +152,9 @@ figure-table-protection-threshold = 0.3 # IoU threshold for figure/table protect
 
 # Translation service
 openai = true
-openai-model = "deepseek-flash"
-openai-base-url = "https://api.deepseek.com"
-openai-api-key = "sk-0139fc46905c4d819e7df11cdbe02275"
-enable-json-mode-if-requested = false  # Enable JSON mode when requested (default: false)
+openai-model = "模型名称"                    # 需要自己填写
+openai-base-url = "https://你的接口地址/v1"    # 需要自己填写
+openai-api-key = "你的 API 密钥"                # 需要自己填写  enable-json-mode-if-requested = false  # Enable JSON mode when requested (default: false)
 disable-same-text-fallback = false # Disable fallback translation when LLM output matches input text (default: false)
 pool-max-workers = 8  # Maximum worker threads for task processing (defaults to QPS value if not set)
 
@@ -249,8 +248,6 @@ babeldoc \
 ```
 
 只解析第一页会截断延续到第二页的段落，例如第一页末尾可能留下 `en-` 之类的断词。
-
-# 
 
 ## 预下载资源
 
