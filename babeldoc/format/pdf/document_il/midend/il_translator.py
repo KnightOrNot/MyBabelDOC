@@ -1,3 +1,4 @@
+# Modified in this fork on 2026-09-10; see NOTICE for details.
 from __future__ import annotations
 
 import json
@@ -996,8 +997,10 @@ class ILTranslator:
         translated_text: str,
     ):
         """Post-translation processing: update paragraph with translated text."""
+        if not isinstance(translated_text, str) or not translated_text.strip():
+            raise ValueError("Refusing to replace paragraph with an empty translation")
         tracker.set_output(translated_text)
-        if translated_text == translate_input:
+        if translated_text.strip() == translate_input.unicode.strip():
             if llm_translate_tracker := tracker.last_llm_translate_tracker():
                 llm_translate_tracker.set_placeholder_full_match()
             return False

@@ -1,0 +1,24 @@
+BabelDOC Local Enhanced Fork
+============================
+
+This repository is a modified version of BabelDOC:
+https://github.com/funstory-ai/BabelDOC
+
+The original work and this derivative version are distributed under the GNU
+Affero General Public License, version 3. See LICENSE for the complete terms.
+Copyright in the original work remains with its respective copyright holders.
+
+Fork modifications began on 2026-09-10 and include:
+
+- validation and retry handling for empty translation responses;
+- safeguards against replacing source paragraphs with empty output;
+- compatibility changes for reasoning-capable OpenAI-style APIs;
+- translation-length validation appropriate for short Chinese text;
+- preservation of author, affiliation, URL, and figure-internal text layouts;
+- figure-caption and cross-page translation workflow improvements;
+- no-watermark output by default; and
+- local source installation and private TOML configuration documentation.
+
+Files changed from the original work carry a short modification notice and
+refer to this file. Newly added files form part of the same AGPL-3.0-covered
+work. No additional noncommercial restriction is imposed.

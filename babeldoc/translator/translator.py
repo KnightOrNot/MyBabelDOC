@@ -1,3 +1,4 @@
+# Modified in this fork on 2026-09-10 and 2026-09-11; see NOTICE for details.
 import contextlib
 import logging
 import threading
@@ -117,6 +118,28 @@ class BaseTranslator(ABC):
         """
         self.cache.add_params(k, v)
 
+    @staticmethod
+    def _is_empty_translation(translation) -> bool:
+        """Return whether a translation is missing or contains only whitespace."""
+        return not isinstance(translation, str) or not translation.strip()
+
+    def _request_nonempty_translation(self, request, text, rate_limit_params):
+        """Retry transient empty responses without ever storing them in the cache."""
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            _translate_rate_limiter.wait()
+            translation = request(text, rate_limit_params)
+            if not self._is_empty_translation(translation):
+                return translation
+            logger.warning(
+                "Translation service returned an empty response (attempt %d/%d)",
+                attempt,
+                max_attempts,
+            )
+        raise ValueError(
+            f"Translation service returned an empty response after {max_attempts} attempts"
+        )
+
     def translate(self, text, ignore_cache=False, rate_limit_params: dict = None):
         """
         Translate the text, and the other part should call this method.
@@ -127,13 +150,14 @@ class BaseTranslator(ABC):
         if not (self.ignore_cache or ignore_cache):
             try:
                 cache = self.cache.get(text)
-                if cache is not None:
+                if cache is not None and not self._is_empty_translation(cache):
                     self.translate_cache_call_count += 1
                     return cache
             except Exception as e:
                 logger.debug(f"try get cache failed, ignore it: {e}")
-        _translate_rate_limiter.wait()
-        translation = self.do_translate(text, rate_limit_params)
+        translation = self._request_nonempty_translation(
+            self.do_translate, text, rate_limit_params
+        )
         if not (self.ignore_cache or ignore_cache):
             self.cache.set(text, translation)
         return translation
@@ -148,13 +172,14 @@ class BaseTranslator(ABC):
         if not (self.ignore_cache or ignore_cache):
             try:
                 cache = self.cache.get(text)
-                if cache is not None:
+                if cache is not None and not self._is_empty_translation(cache):
                     self.translate_cache_call_count += 1
                     return cache
             except Exception as e:
                 logger.debug(f"try get cache failed, ignore it: {e}")
-        _translate_rate_limiter.wait()
-        translation = self.do_llm_translate(text, rate_limit_params)
+        translation = self._request_nonempty_translation(
+            self.do_llm_translate, text, rate_limit_params
+        )
         if not (self.ignore_cache or ignore_cache):
             try:
                 self.cache.set(text, translation)
@@ -290,7 +315,7 @@ class OpenAITranslator(BaseTranslator):
             },
             {
                 "role": "user",
-                "content": f";; Treat next line as plain text input and translate it into {self.lang_out}, output translation ONLY. If translation is unnecessary (e.g. proper nouns, codes, {'{{1}}, etc. '}), return the original text. NO explanations. NO notes. Input:\n\n{text}",
+                "content": f";; Treat next line as plain text input and translate it into {self.lang_out}, output translation ONLY. The input may be a short fragment from a figure; translate incomplete fragments too. Keep only proper nouns, codes, acronyms, and placeholders such as {'{{1}}'} unchanged. Do not leave other source-language words in the result. NO explanations. NO notes. Input:\n\n{text}",
             },
         ]
 
@@ -307,6 +332,7 @@ class OpenAITranslator(BaseTranslator):
         options = {}
         if self.send_temperature:
             options.update(self.options)
+        rate_limit_params = rate_limit_params or {}
         if self.enable_json_mode_if_requested and rate_limit_params.get(
             "request_json_mode", False
         ):
@@ -321,7 +347,11 @@ class OpenAITranslator(BaseTranslator):
             response = self.client.chat.completions.create(
                 model=self.model,
                 **options,
-                max_tokens=2048,
+                # Reasoning-capable OpenAI-compatible models may consume much of
+                # this budget before producing message.content. A 2048-token cap
+                # can therefore yield an empty visible answer even for a short
+                # paragraph.
+                max_tokens=8192,
                 messages=[
                     {
                         "role": "user",

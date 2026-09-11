@@ -1,3 +1,4 @@
+# Modified in this fork on 2026-09-10 and 2026-09-11; see NOTICE for details.
 import json
 import logging
 import re
@@ -36,6 +37,13 @@ from babeldoc.utils.priority_thread_pool_executor import PriorityThreadPoolExecu
 
 logger = logging.getLogger(__name__)
 
+NON_TRANSLATED_FIGURE_LAYOUTS = {
+    "figure_text",
+    "figure_text_hybrid",
+    "figure_title",
+    "chart_title",
+}
+
 
 PROMPT_TEMPLATE = Template(
     """$role_block
@@ -49,6 +57,9 @@ PROMPT_TEMPLATE = Template(
    - Do NOT change the meaning.
    - Do NOT move placeholders, tags, or code outside their paragraph.
 4. Translate ALL human-readable content into $lang_out.
+5. Some inputs are short fragments extracted from figures or diagrams. Translate
+   those fragments too, and do not leave source-language words unless they are
+   proper nouns, codes, acronyms, or placeholders.
 
 ## Do NOT Modify
 - Tags (e.g., <style>, <b>, <code>): keep them exactly the same.  
@@ -271,6 +282,29 @@ class ILTranslatorLLMOnly:
             "paragraph_hybrid",
         )
 
+    @staticmethod
+    def _is_likely_author_metadata(paragraph: PdfParagraph) -> bool:
+        """Keep author, affiliation, and URL blocks in their original layout."""
+        if paragraph.layout_label == "author_info_hybrid":
+            return True
+        text = paragraph.unicode or ""
+        has_url = "http://" in text or "https://" in text
+        return has_url and text.count(",") >= 4
+
+    @staticmethod
+    def _has_nontranslated_figure_layout(paragraph: PdfParagraph) -> bool:
+        return paragraph.layout_label in NON_TRANSLATED_FIGURE_LAYOUTS
+
+    @staticmethod
+    def _translation_length_is_plausible(
+        input_token_count: int, output_token_count: int
+    ) -> bool:
+        # Token ratios are too noisy for short labels. For example, a valid
+        # two-token English label can easily become six Chinese tokens.
+        if input_token_count < 10:
+            return output_token_count > 0
+        return 0.3 < output_token_count / input_token_count < 3
+
     def _should_translate_paragraph(
         self,
         paragraph: PdfParagraph,
@@ -301,6 +335,12 @@ class ILTranslatorLLMOnly:
 
         # Minimum length check
         if len(paragraph.unicode) < self.translation_config.min_text_length:
+            return False
+
+        if self._is_likely_author_metadata(paragraph):
+            return False
+
+        if self._has_nontranslated_figure_layout(paragraph):
             return False
 
         # Body text check if requested
@@ -568,6 +608,16 @@ class ILTranslatorLLMOnly:
                     pbar.advance(1)
                 continue
 
+            if self._is_likely_author_metadata(paragraph):
+                if pbar:
+                    pbar.advance(1)
+                continue
+
+            if self._has_nontranslated_figure_layout(paragraph):
+                if pbar:
+                    pbar.advance(1)
+                continue
+
             if is_pure_numeric_paragraph(paragraph):
                 if pbar:
                     pbar.advance(1)
@@ -780,7 +830,9 @@ class ILTranslatorLLMOnly:
                         )
                         continue
 
-                    if not (0.3 < output_token_count / input_token_count < 3):
+                    if not self._translation_length_is_plausible(
+                        input_token_count, output_token_count
+                    ):
                         llm_translate_tracker.set_error_message(
                             f"Translation result is too long or too short. Input: {input_token_count}, Output: {output_token_count}"
                         )

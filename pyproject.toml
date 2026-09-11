@@ -1,7 +1,7 @@
 [project]
 name = "BabelDOC"
 version = "0.6.4"
-description = "Yet Another Document Translator"
+description = "A locally enhanced scientific PDF translator"
 license = "AGPL-3.0"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
@@ -9,7 +9,7 @@ authors = [
     { name = "awwaawwa", email = "aw@funstory.ai" }
 ]
 maintainers = [
-    { name = "awwaawwa", email = "aw@funstory.ai" }
+    { name = "Knight" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -58,10 +58,6 @@ dependencies = [
 directml = ["onnxruntime-directml>=1.16.1"]
 cuda = ["onnxruntime-gpu>=1.16.1"]
 memray = ["memray>=1.17.1"]
-
-[project.urls]
-Homepage = "https://github.com/funstory-ai/BabelDOC"
-Issues = "https://github.com/funstory-ai/BabelDOC/issues"
 
 [project.scripts]
 babeldoc = "babeldoc.main:cli"

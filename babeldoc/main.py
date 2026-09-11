@@ -1,3 +1,4 @@
+# Modified in this fork on 2026-09-11; see NOTICE for details.
 import asyncio
 import logging
 import multiprocessing as mp
@@ -215,8 +216,8 @@ def create_parser():
         "--watermark-output-mode",
         type=str,
         choices=["watermarked", "no_watermark", "both"],
-        default="watermarked",
-        help="Control watermark output mode: 'watermarked' (default) adds watermark to translated PDF, 'no_watermark' doesn't add watermark, 'both' outputs both versions.",
+        default="no_watermark",
+        help="Control watermark output mode: 'no_watermark' (default) omits the BabelDOC header, 'watermarked' adds it, and 'both' outputs both versions.",
     )
     translation_group.add_argument(
         "--max-pages-per-part",
@@ -659,7 +660,7 @@ async def main():
     else:
         working_dir = None
 
-    watermark_output_mode = WatermarkOutputMode.Watermarked
+    watermark_output_mode = WatermarkOutputMode.NoWatermark
     if args.no_watermark:
         watermark_output_mode = WatermarkOutputMode.NoWatermark
     elif args.watermark_output_mode == "both":

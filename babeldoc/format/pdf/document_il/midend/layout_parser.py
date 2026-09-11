@@ -1,3 +1,4 @@
+# Modified in this fork on 2026-09-11; see NOTICE for details.
 import logging
 import math
 import os
@@ -14,6 +15,89 @@ from babeldoc.format.pdf.document_il.utils.style_helper import GREEN
 from babeldoc.format.pdf.translation_config import TranslationConfig
 
 logger = logging.getLogger(__name__)
+
+
+FIGURE_TABLE_LAYOUTS = {
+    "figure",
+    "table",
+    "figure_text",
+    "table_text",
+    "figure_text_hybrid",
+    "table_cell",
+    "table_cell_hybrid",
+}
+
+
+def is_box_inside_container(box, container_boxes, min_coverage=0.8):
+    area = max(0, box.x2 - box.x) * max(0, box.y2 - box.y)
+    if not area:
+        return False
+    for container in container_boxes:
+        intersection = max(0, min(box.x2, container.x2) - max(box.x, container.x))
+        intersection *= max(0, min(box.y2, container.y2) - max(box.y, container.y))
+        if intersection / area >= min_coverage:
+            return True
+    return False
+
+
+def merge_adjacent_figure_line_boxes(line_boxes, container_boxes):
+    """Merge vertically adjacent text lines inside the same figure or table.
+
+    Layout detection often emits one fallback layout per visual line. Keeping
+    those layouts separate removes the context needed to translate labels such
+    as a question split over three lines and produces awkward mixed-language
+    overlays.
+    """
+    assignments: dict[int, list] = {}
+    standalone = []
+    for box in line_boxes:
+        area = max(0, box.x2 - box.x) * max(0, box.y2 - box.y)
+        best_container = None
+        best_coverage = 0.0
+        for index, container in enumerate(container_boxes):
+            intersection = max(0, min(box.x2, container.x2) - max(box.x, container.x))
+            intersection *= max(0, min(box.y2, container.y2) - max(box.y, container.y))
+            coverage = intersection / area if area else 0
+            if coverage > best_coverage:
+                best_container = index
+                best_coverage = coverage
+        if best_container is None or best_coverage < 0.8:
+            standalone.append(box)
+        else:
+            assignments.setdefault(best_container, []).append(box)
+
+    merged = list(standalone)
+    for boxes in assignments.values():
+        groups: list[list] = []
+        for box in sorted(boxes, key=lambda item: (-item.y2, item.x)):
+            best_group = None
+            best_gap = math.inf
+            for group in groups:
+                previous = group[-1]
+                height = max(previous.y2 - previous.y, box.y2 - box.y)
+                vertical_gap = previous.y - box.y2
+                overlap = max(0, min(previous.x2, box.x2) - max(previous.x, box.x))
+                min_width = min(previous.x2 - previous.x, box.x2 - box.x)
+                overlap_ratio = overlap / min_width if min_width > 0 else 0
+                if -0.2 * height <= vertical_gap <= 1.75 * height and overlap_ratio >= 0.55:
+                    if vertical_gap < best_gap:
+                        best_group = group
+                        best_gap = vertical_gap
+            if best_group is None:
+                groups.append([box])
+            else:
+                best_group.append(box)
+
+        for group in groups:
+            merged.append(
+                il_version_1.Box(
+                    min(box.x for box in group),
+                    min(box.y for box in group),
+                    max(box.x2 for box in group),
+                    max(box.y2 for box in group),
+                )
+            )
+    return merged
 
 
 class LayoutParser:
@@ -187,23 +271,32 @@ class LayoutParser:
             clusters = babeldoc.format.pdf.document_il.utils.extract_char.process_page_chars_to_lines(
                 char_boxes
             )
+            line_boxes = []
             for cluster in clusters:
                 boxes = [c[0] for c in cluster.chars]
                 min_x = min(b.x for b in boxes)
                 max_x = max(b.x2 for b in boxes)
                 min_y = min(b.y for b in boxes)
                 max_y = max(b.y2 for b in boxes)
-                cluster.chars = il_version_1.Box(min_x, min_y, max_x, max_y)
+                line_boxes.append(il_version_1.Box(min_x, min_y, max_x, max_y))
+
+            container_boxes = [
+                layout.box
+                for layout in exists_page_layouts
+                if layout.class_name in FIGURE_TABLE_LAYOUTS
+            ]
+            line_boxes = merge_adjacent_figure_line_boxes(line_boxes, container_boxes)
+            for line_box in line_boxes:
+                layout_class = (
+                    "figure_text"
+                    if is_box_inside_container(line_box, container_boxes)
+                    else "fallback_line"
+                )
                 page_layout = il_version_1.PageLayout(
                     id=len(exists_page_layouts) + 1,
-                    box=il_version_1.Box(
-                        min_x,
-                        min_y,
-                        max_x,
-                        max_y,
-                    ),
+                    box=line_box,
                     conf=1,
-                    class_name="fallback_line",
+                    class_name=layout_class,
                 )
                 exists_page_layouts.append(page_layout)
             self._save_debug_box_to_page(page)

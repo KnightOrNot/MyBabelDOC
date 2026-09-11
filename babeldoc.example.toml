@@ -1,0 +1,21 @@
+[babeldoc]
+# OpenAI-compatible translation service. Replace all three values.
+openai = true
+openai-model = "your-model-name"
+openai-base-url = "https://your-api-endpoint.example/v1"
+openai-api-key = "your-api-key"
+
+lang-in = "en-US"
+lang-out = "zh-CN"
+qps = 4
+pool-max-workers = 4
+
+# Use an absolute path. TOML does not expand ~ or $HOME.
+output = "/absolute/path/to/translated-output"
+
+# Keep generated PDFs free of the BabelDOC promotional header.
+watermark-output-mode = "no_watermark"
+debug = false
+
+# Disable this when an API does not reliably support glossary JSON output.
+no-auto-extract-glossary = true
