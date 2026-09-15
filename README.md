@@ -17,66 +17,98 @@
 ## 环境要求
 
 - Linux 或 WSL
-- Git
-- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- Git 和 curl
+- [pyenv](https://github.com/pyenv/pyenv)：安装并选择 Python
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)：创建 `.venv`、同步依赖和运行项目
 - 可用的 OpenAI 兼容 API
 
-不要求提前安装 Python。下面的命令会让 uv 自动准备 Python 3.12。
+项目支持 Python 3.10～3.13，当前开发环境固定为 Python 3.12.14。下面的流程由 pyenv 提供 Python，由 uv 管理项目环境；不会让 uv 另外下载一套 Python。
 
 ## 快速开始
 
-### 1. 安装 uv
+### 1. 安装并配置 pyenv
 
-先检查系统中是否已有 uv：
+先检查 pyenv：
+
+```bash
+pyenv --version
+```
+
+如果尚未安装，在 Ubuntu 或 WSL 中先安装编译 Python 所需的依赖：
+
+```bash
+sudo apt update
+sudo apt install -y \
+    build-essential curl git libbz2-dev libffi-dev liblzma-dev \
+    libncursesw5-dev libreadline-dev libsqlite3-dev libssl-dev \
+    libxml2-dev libxmlsec1-dev tk-dev xz-utils zlib1g-dev
+```
+
+然后使用 pyenv 官方安装脚本，并配置当前 shell：
+
+```bash
+curl -fsSL https://pyenv.run | bash
+~/.pyenv/bin/pyenv init --install
+exec "$SHELL"
+pyenv --version
+```
+
+其他 Linux 发行版请先按照 [pyenv 的构建环境说明](https://github.com/pyenv/pyenv/wiki#suggested-build-environment)安装对应依赖。
+
+### 2. 安装 uv
+
+先检查 uv：
 
 ```bash
 uv --version
 ```
 
-如果提示 `uv: command not found`，使用官方安装脚本：
+如果尚未安装，使用 uv 官方安装脚本：
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-如果系统没有 `curl`，也可以使用：
-
-```bash
-wget -qO- https://astral.sh/uv/install.sh | sh
-```
-
-安装后重新打开终端，再确认：
-
-```bash
+exec "$SHELL"
 uv --version
 ```
 
-### 2. 克隆并安装当前源码
+### 3. 克隆仓库并选择 Python
 
-在本项目的仓库页面复制实际的 clone 地址，然后执行以下命令。`YOUR_REPOSITORY_URL` 和 `YOUR_REPOSITORY_DIRECTORY` 是占位符，需要替换成实际内容：
-
-```bash
-git clone git@github.com:KnightOrNot/MyBabelDOC.git
-cd MyBabelDoc
-uv tool install --python 3.12 --editable .
-uv tool update-shell
-```
-
-如果已经克隆了仓库，直接进入仓库根目录，从 `uv tool install` 开始执行即可。
-
-`--editable` 会让命令使用当前仓库中的源码。以后修改 Python 文件时无需重复安装。如果此前已经安装过同名工具，可强制替换：
+仓库可以克隆到任意目录：
 
 ```bash
-uv tool install --force --python 3.12 --editable .
+git clone https://github.com/KnightOrNot/MyBabelDOC.git
+cd MyBabelDOC
 ```
 
-`uv tool update-shell` 会把 uv 的工具目录加入 `PATH`。执行后重新打开终端，再检查：
+仓库中的 `.python-version` 指定了 Python 3.12.14。让 pyenv 安装这个具体版本，然后确认当前解释器：
 
 ```bash
-babeldoc --version
+pyenv install -s 3.12.14
+pyenv version
+python --version
+pyenv which python
 ```
 
-### 3. 创建配置文件
+进入仓库及其子目录时，pyenv 会根据 `.python-version` 自动选择这套 Python，不会改变其他项目的全局版本。
+
+### 4. 使用 uv 创建项目环境
+
+让 uv 明确使用 pyenv 当前选中的解释器，并按照仓库中的 `uv.lock` 同步依赖：
+
+```bash
+uv sync --locked --no-managed-python --python "$(pyenv which python)"
+```
+
+uv 会在仓库中创建 `.venv`，并以 editable 模式安装当前源码。修改仓库中的 Python 文件后会直接生效。检查环境：
+
+```bash
+uv run python --version
+uv run babeldoc --version
+```
+
+如果 `uv sync --locked` 提示 `uv.lock` 与 `pyproject.toml` 不一致，开发者应先运行 `uv lock` 更新锁文件；普通使用者不应随意更新锁文件。
+
+### 5. 创建配置文件
 
 以下命令需要在刚才克隆的仓库根目录中执行：
 
@@ -86,16 +118,14 @@ cp ./babeldoc.example.toml ~/.config/babeldoc/babeldoc.toml
 chmod 600 ~/.config/babeldoc/babeldoc.toml
 ```
 
-编辑 `~/.config/babeldoc/babeldoc.toml` ：
-
-- 简略配置如下：
+编辑 `~/.config/babeldoc/babeldoc.toml`，至少填写下面几项：
 
 ```toml
 [babeldoc]
 openai = true
-openai-model = "模型名称"                    # 需要自己填写
-openai-base-url = "https://你的接口地址/v1"    # 需要自己填写
-openai-api-key = "你的 API 密钥"                # 需要自己填写                    
+openai-model = "模型名称"
+openai-base-url = "https://你的接口地址/v1"
+openai-api-key = "你的 API 密钥"
 
 lang-in = "en-US"
 lang-out = "zh-CN"
@@ -112,80 +142,31 @@ watermark-output-mode = "no_watermark"
 no-auto-extract-glossary = true
 ```
 
-- 详细配置如下：
+其余可选项和说明见仓库中的 [`babeldoc.example.toml`](./babeldoc.example.toml)。真实配置中包含 API 密钥，不要把它复制到仓库或提交到 Git。
 
-```toml
-[babeldoc]
-# Basic settings
-debug = false
-lang-in = "en-US"
-lang-out = "zh-CN"
-qps = 10
-output = "/home/knight/paper/translate"
+### 6. 运行 BabelDOC
 
-# PDF processing options
-split-short-lines = false
-short-line-split-factor = 0.8
-skip-clean = false
-dual-translate-first = false
-disable-rich-text-translate = false
-use-alternating-pages-dual = false
-watermark-output-mode = "no_watermark"  # Choices: "watermarked", "no_watermark", "both"
-max-pages-per-part = 50  # Automatically split the document for translation and merge it back.
-only-include-translated-page = false # Only include translated pages in the output PDF. Effective only when `pages` is used.
-# no-watermark = false  # DEPRECATED: Use watermark-output-mode instead
-skip-scanned-detection = false  # Skip scanned document detection for faster processing
-no-auto-extract-glossary = false
-formular-font-pattern = "" # Font pattern for formula text
-formular-char-pattern = "" # Character pattern for formula text
-show-char-box = false # Show character bounding boxes (debug)
-ocr-workaround = false # Use OCR workaround for scanned PDFs
-rpc-doclayout = "" # RPC service host for document layout analysis
-working-dir = "" # Working directory for translation
-auto-enable-ocr-workaround = false # Enable automatic OCR workaround for scanned PDFs. See docs for interaction with ocr_workaround and skip_scanned_detection.
-skip-form-render = false # Skip form rendering (default: False)
-skip-curve-render = false # Skip curve rendering (default: False)
-only-parse-generate-pdf = false # Only parse PDF and generate output PDF without translation (default: False)
-remove-non-formula-lines = false # Remove non-formula lines from paragraph areas (default: False)
-non-formula-line-iou-threshold = 0.2 # IoU threshold for paragraph overlap detection (default: 0.2)
-figure-table-protection-threshold = 0.3 # IoU threshold for figure/table protection (default: 0.3)
-
-# Translation service
-openai = true
-openai-model = "模型名称"                    # 需要自己填写
-openai-base-url = "https://你的接口地址/v1"    # 需要自己填写
-openai-api-key = "你的 API 密钥"                # 需要自己填写  enable-json-mode-if-requested = false  # Enable JSON mode when requested (default: false)
-disable-same-text-fallback = false # Disable fallback translation when LLM output matches input text (default: false)
-pool-max-workers = 8  # Maximum worker threads for task processing (defaults to QPS value if not set)
-
-# Glossary Options (Optional)
-# glossary-files = "/path/to/glossary1.csv,/path/to/glossary2.csv"
-
-# Output control
-no-dual = false
-no-mono = false
-min-text-length = 5
-report-interval = 0.5
-
-# Offline assets management
-# Uncomment one of these options as needed:
-# generate-offline-assets = "/path/to/output/dir"
-# restore-offline-assets = "/path/to/offline_assets_package.zip"
-```
-
-真实配置中包含 API 密钥，不要把它复制到仓库或提交到 Git。
-
-### 4. 让命令自动读取配置
-
-将下面的函数加入 `~/.bashrc` 的最后。它只引用用户配置目录，不依赖仓库的克隆位置：
+在仓库根目录中可以直接运行：
 
 ```bash
+uv run babeldoc \
+    -c "$HOME/.config/babeldoc/babeldoc.toml" \
+    --files "/absolute/path/to/paper.pdf"
+```
+
+如果希望在任意目录中直接使用 `babeldoc`，先在仓库根目录运行 `pwd`，记下输出的绝对路径。然后把下面内容加入 `~/.bashrc`，并将 `/absolute/path/to/MyBabelDOC` 替换为刚才的实际输出：
+
+```bash
+export BABELDOC_PROJECT_DIR="/absolute/path/to/MyBabelDOC"
+unalias babeldoc 2>/dev/null
 babeldoc() {
-    command babeldoc -c "$HOME/.config/babeldoc/babeldoc.toml" "$@"
+    command uv run --project "$BABELDOC_PROJECT_DIR" babeldoc \
+        -c "$HOME/.config/babeldoc/babeldoc.toml" \
+        "$@"
 }
 ```
 
-让配置立即生效：
+重新加载 shell 配置并检查命令：
 
 ```bash
 source ~/.bashrc
@@ -193,7 +174,7 @@ babeldoc --version
 babeldoc --help
 ```
 
-此后可以在任意路径使用 `babeldoc`，无需激活虚拟环境，也无需重复输入 API 参数。
+这个函数始终使用指定仓库的 `.venv` 和源码，但待翻译文件的相对路径仍以当前终端目录为基准。建议对 PDF 和输出目录使用绝对路径。
 
 ## 翻译文档
 
@@ -324,21 +305,23 @@ no-auto-extract-glossary = true
 
 ### 命令只能在仓库目录中运行
 
-确认已执行 `uv tool update-shell`，重新打开终端，然后检查：
+检查 `~/.bashrc` 中的 `BABELDOC_PROJECT_DIR` 是否已经替换为实际仓库路径：
 
 ```bash
-uv tool dir --bin
 type babeldoc
+printf '%s\n' "$BABELDOC_PROJECT_DIR"
+test -f "$BABELDOC_PROJECT_DIR/pyproject.toml" && echo "project found"
 ```
 
-如果 `type babeldoc` 仍然找不到命令，再执行一次 `uv tool update-shell`，并重新打开终端。
+修改后运行 `source ~/.bashrc`。如果只在仓库目录中使用，则直接执行 `uv run babeldoc ...`，无需配置全局函数。
 
 ## 开发与验证
 
 先进入自己实际克隆的仓库根目录，再安装开发依赖并运行测试和代码检查：
 
 ```bash
-uv sync --python 3.12 --group dev
+pyenv install -s 3.12.14
+uv sync --locked --no-managed-python --python "$(pyenv which python)"
 uv run pytest -q tests
 uv run ruff check babeldoc tests
 ```

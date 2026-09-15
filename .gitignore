@@ -38,15 +38,9 @@ examples/
 /docs/workflow-rules.md
 babeldoc/format/txt
 /profile.svg
-
-
-# uv
-uv.lock
-
 /.claude
 babeldoc/format/playground
 temp.jpg
 .serena
 .codex
 .repomap.tags.cache.v1/
-
